@@ -27,19 +27,32 @@ workers call job()
 */
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
+enum Message {
+    NewJob(Job),
+    Terminate,
+}
 
 struct Worker {
     id: usize,
-    worker: JoinHandle<Receiver<Job>>,
+    worker: JoinHandle<()>,
 }
 
 impl Worker {
-    fn new(id: usize, reciver: Arc<Mutex<Receiver<Job>>>) -> Self {
+    fn new(id: usize, reciver: Arc<Mutex<Receiver<Message>>>) -> Self {
         let worker = thread::spawn(move || {
             loop {
-                let job = reciver.lock().unwrap().recv().unwrap();
-                println!("Worker {id} executing a job");
-                job();
+                let message = reciver.lock().unwrap().recv().unwrap();
+                match message {
+                    Message::NewJob(job) => {
+                        println!("Worker {id} executing a job");
+                        job();
+                    }
+                    Message::Terminate => {
+                        println!("Worker {id} is terminating");
+                        // exit the loop
+                        break;
+                    }
+                }
             }
         });
         Worker { id, worker }
@@ -48,7 +61,7 @@ impl Worker {
 
 pub struct ThreadPool {
     worker_pool: Vec<Worker>,
-    sender: mpsc::Sender<Job>,
+    sender: mpsc::Sender<Message>,
 }
 
 impl ThreadPool {
@@ -85,12 +98,33 @@ impl ThreadPool {
         F: FnOnce() + Send + 'static,
     {
         let job = Box::new(f);
-        self.sender.send(job).unwrap();
+        self.sender.send(Message::NewJob(job)).unwrap();
         // I am not sure how sending the closure automatically guarantees that
         // it will be recieved and ran in the worker implementation
     }
 }
 
+// Send terminate signal to all workers
+// Wait until all the workers are drained
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        println!("Sending terminate message to all workers.");
+        // Handles indefinite loop problem 
+        for _ in &self.worker_pool {
+            self.sender.send(Message::Terminate).unwrap();
+        }
+        println!("Shutting down all workers.");
+        // Handles ownership problem for join (join consumes the handle)
+        for thread in self.worker_pool.drain(..) {
+            println!("Shutting down worker {}", thread.id);
+            thread.worker.join().unwrap();
+        }
+    }
+}
+
+// Does not work as main thread is blocked as worker loop forever
+// Join only waits for all threads to finish but does not signal them to stop
+// Question: How to make workers stop?
 // impl Drop for ThreadPool {
 //     fn drop(&mut self) {
 //         for thread in &mut self.worker_pool.drain(..) {

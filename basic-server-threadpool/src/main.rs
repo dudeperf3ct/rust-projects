@@ -35,7 +35,7 @@ fn main() -> Result<()> {
     let num_threads = 4;
     let mut pool = ThreadPool::new(num_threads);
 
-    for stream in listener.incoming() {
+    for stream in listener.incoming() {  //.take(2) { tests dropping of threadpool
         let stream = stream.unwrap();
 
         pool.execute(|| {
