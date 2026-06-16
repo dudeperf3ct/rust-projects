@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::List,
+    widgets::{List, ListItem},
 };
 
 use crate::app::App;
@@ -38,9 +38,13 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &mut App) {
 }
 
 fn render_list(frame: &mut Frame, area: Rect, app: &mut App) {
-    let list = List::new(app.todo_items.clone())
-        .style(Color::White)
-        .highlight_style(Modifier::REVERSED)
-        .highlight_symbol("> ");
-    frame.render_stateful_widget(list, area, &mut app.todo_state);
+    let todo_list = List::from_iter(app.todo.iter().map(|todo| {
+        let checkbox = if todo.completed { "[x]" } else { "[ ]" };
+
+        ListItem::new(format!("{checkbox} {}", todo.item))
+    }))
+    .highlight_symbol("> ")
+    .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+
+    frame.render_stateful_widget(todo_list, area, &mut app.todo_state.state);
 }
