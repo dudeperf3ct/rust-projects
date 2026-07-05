@@ -12,9 +12,9 @@ More formally, the application state would cover
 - Quit the application
 
 Let's think about the input iteraction
-- Down key means “move selection down”
+- Down key or j (vim-navigation style) means “move selection down”
 - Enter means “toggle current todo” or “submit current input”
-- i means "start editing"
+- e means "start editing"
 - Esc means "cancel editing"
 - q means "quit"
 
@@ -76,7 +76,7 @@ pub struct App {
 }
 
 pub struct TodoState {
-    /// List state is a stateful widget that keeps track of selected item and rest of items in list
+    /// List state tracks list UI state such as selected row/scroll position. It does not store the todo items.
     pub state: ListState,
 }
 ```
@@ -106,3 +106,69 @@ fn toggle_selected_item(&mut self) {
 ```
 
 ## Fourth phase
+
+In the third phase, we were populating the list of item statically. In this phase, we want to have a separate input area which will send the input text as an item in the todo (dynamic).
+
+So now we have two modes: non-editing mode and editing mode
+
+In non-editing mode (normal):
+
+* `j` / `Down` means move selection
+* `k` / `Up` means move selection
+* `Space` means toggle selected todo
+* `q` means quit
+* `e` means enter editing/input mode
+
+Then when `e` is pressed, the meaning of keys changes.
+
+In editing mode:
+
+* normal letters should become input text
+* `j` should probably mean the character "j", not move down
+* `k` should probably mean the character "k", not move up
+* `q` should probably mean the character "q", not quit
+* `Esc` should stop editing
+
+```rust
+#[derive(Debug, Default)]
+pub enum ApplicationMode {
+    Edit,
+    #[default]
+    Normal,
+}
+```
+
+Next is since we want to take input through a text area we need some way to keep track of it. For now we can have it as a simple `input_text` is `String` but it can get more complicated or it's own struct if we need cursor movement or input selection.
+
+This introudces new methods that we need to take care of when in editing mode to handle `Backspace`, any character inserted and `Enter` pressed.
+
+After this, we have to look into UI and how to render the text area. The layout changes with 4 elements like
+
+```rust
+let constraints = [
+        Constraint::Length(1),
+        Constraint::Min(1),
+        Constraint::Percentage(10),
+        Constraint::Length(1),
+    ];
+```
+
+`Paragraph` widget is used to capture the input string and the text area is highlighted with different color depending on the application mode.
+
+```rust
+fn render_input_text(frame: &mut Frame, area: Rect, app: &mut App) {
+    let input_text = Paragraph::new(app.input_string.join(""))
+        .style(match app.input_mode {
+            ApplicationMode::Normal => Style::default(),
+            ApplicationMode::Editing => Style::default().fg(Color::Yellow),
+        })
+        .block(Block::bordered().title("Input"));
+    frame.render_widget(input_text, area);
+}
+```
+
+Further
+
+- [ ] Editing the todos
+- [ ] Advanced cursor editing
+- [ ] Displaying cleared todos maybe as strikethrough
